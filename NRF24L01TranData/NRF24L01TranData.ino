@@ -6,13 +6,13 @@
 #define trigPin 2
 #define echoPin 3
 
-// Define CE and CSN pin for NRF24L01
-#define CEpin 4
-#define CSNpin 5
-
 // Define variables for HC-204:
 long duration;
 int distanceInCm;
+
+// Define CE and CSN pin for NRF24L01
+#define CEpin 4
+#define CSNpin 5
 
 //NRF radio setup
 RF24 radio(CEpin, CSNpin);
