@@ -31,13 +31,14 @@ void setup() {
 
 void loop() {
   distanceInCm = getWaterHeight();
-  bool success = sendData(distanceInCm);
-  if (success) {
-    Serial.print("Data sent: ");
-    Serial.println(distanceInCm);
-  } else {
-    Serial.println("Transmission failed :(");
-  }
+  Serial.println(distanceInCm);
+  // bool success = sendData(distanceInCm);
+  // if (success) {
+  //   Serial.print("Data sent: ");
+  //   Serial.println(distanceInCm);
+  // } else {
+  //   Serial.println("Transmission failed :(");
+  // }
 }
 
 bool sendData(int data){
