@@ -2,12 +2,13 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Wire.h>  // Include the Wire library for I2C communication
-#include <DHT.h>
-#include "DHT.h"
+//#include <DHT.h>
+//#include "DHT.h"
 #include "DFRobot_OxygenSensor.h"
+#include "DFRobot_AirQualitySensor.h"
 #include "Seeed_BME280.h"  // Include the BME280 library
 
-#define READ_DELAY 5000    // Define the delay between readings (in milliseconds)
+#define READ_DELAY 5000    // Define the delay between readings (in milliseconds) CHANGE TO 1 MIN
 
 //Define variable for NRF24L01:
 #define CE_PIN 49   
@@ -17,13 +18,13 @@ RF24 radio(CE_PIN, CSN_PIN);
 const uint64_t pipe = 0xE8E8F0F0E1LL;
 
 // Define variables for DHT11:
-#define DHT11_PIN_0 39
-#define DHT11_PIN_1 38
-#define DHT11_PIN_2 37
-
-#define DHTTYPE DHT11
-
-DHT dht(DHT11_PIN_0, DHTTYPE);
+//#define DHT11_PIN_0 39
+//#define DHT11_PIN_1 38
+//#define DHT11_PIN_2 37
+//
+//#define DHTTYPE DHT11
+//
+//DHT dht(DHT11_PIN_0, DHTTYPE);
 
 // Define variables for Turbidity:
 #define TURBIDITY_PIN_0 A5
@@ -48,12 +49,22 @@ int tankHeight[4];
 // Define values for Oxygen Sensor:
 int OxConc;
 #define COLLECT_NUMBER 10  // collect number, the collection range is 1-100.
-#define Oxygen_IICAddress_0 ADDRESS_3
-#define Oxygen_IICAddress_1 ADDRESS_2
-#define Oxygen_IICAddress_2 ADDRESS_1
+#define Oxygen_IICAddress_0 ADDRESS_0
+#define Oxygen_IICAddress_1 ADDRESS_1
+#define Oxygen_IICAddress_2 ADDRESS_2
+
 DFRobot_OxygenSensor Oxygen_0;
 DFRobot_OxygenSensor Oxygen_1;
 DFRobot_OxygenSensor Oxygen_2;
+
+
+#define AirQuality_IICAddress_0 ADDRESS_3
+//#define AirQuality_IICAddress_1 
+//#define AirQuality_IICAddress_2 
+
+DFRobot_AirQualitySensor AirQualitySensor_0(&Wire ,AirQuality_IICAddress_0);
+
+
 
 // Define values for Air Quality Sensor:
 int airQuality;
@@ -66,6 +77,7 @@ int airQuality;
 #define TDS_SENSOR_PIN_1 A4
 #define VREF 5.0      // analog reference voltage(Volt) of the ADC
 #define SCOUNT  30           // sum of sample point
+
 int analogBuffer[SCOUNT];    // store the analog value in the array, read from ADC
 int analogBufferTemp[SCOUNT];
 int analogBufferIndex = 0,copyIndex = 0;
@@ -107,7 +119,7 @@ void setup() {
   pinMode(ECHO_PIN_2, INPUT);
   pinMode(TRIG_PIN_3, OUTPUT);
   pinMode(ECHO_PIN_3, INPUT);
-  
+
   //For Oxygen Sensor
   // Serial.println("Setting up: Oxygen Sensor");
   // while (!Oxygen_0.begin(Oxygen_IICAddress_0)) {
@@ -123,6 +135,19 @@ void setup() {
   //   Serial.print("I2c device 2 number error !");
   //   delay(1000);
   // }
+
+  Serial.println("Setting up: AirQualitySensor");
+  while(!AirQualitySensor_0.begin()){
+    Serial.println("NO Devices !");
+    delay(1000);
+  }
+  Serial.println("sensor begin success!");
+  delay(1000);
+  
+  uint8_t version = AirQualitySensor_0.gainVersion();
+  Serial.print("version is : ");
+  Serial.println(version);
+  delay(1000);
   
   // dht.begin();
   //For Air Quality Sensor
@@ -179,7 +204,10 @@ void loop() {
   // getTurbidityData(TURBIDITY_PIN_0);
 
   // getTempHumidityData(DHT11_PIN_0);
-  
+
+  // getAirQualitySensorData(AirQualitySensor_0);
+
+  // SERIAL PRINT AS CSV FORMAT
   // Serial.print(getWaterHeight(TRIG_PIN_0, ECHO_PIN_0));
   // Serial.print(", ");
   // Serial.print(getWaterHeight(TRIG_PIN_1, ECHO_PIN_1));
@@ -187,6 +215,32 @@ void loop() {
   // Serial.print(getWaterHeight(TRIG_PIN_2, ECHO_PIN_2));
   // Serial.print(", ");
   // Serial.println(getWaterHeight(TRIG_PIN_3, ECHO_PIN_3));
+}
+
+int getAirQualitySensorData(DFRobot_AirQualitySensor AQS){
+  /**
+ *@brief : Get concentration of PM1.0 PM2.5 PM10
+ *@param :PARTICLE_PM1_0_STANDARD  Standard particle  
+          PARTICLE_PM2_5_STANDARD  Standard particle  
+          PARTICLE_PM10_STANDARD   Standard particle 
+          PARTICLE_PM1_0_ATMOSPHERE  In atmospheric environment
+          PARTICLE_PM2_5_ATMOSPHERE  In atmospheric environment
+          PARTICLE_PM10_ATMOSPHERE   In atmospheric environment
+*/  
+  uint16_t PM2_5 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM2_5_STANDARD);
+  uint16_t PM1_0 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM1_0_STANDARD);
+  uint16_t PM10 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM10_STANDARD);
+  Serial.print("PM2.5 concentration:");
+  Serial.print(PM2_5);
+  Serial.println(" ug/m3");
+  Serial.print("PM1.0 concentration:");
+  Serial.print(PM1_0);
+  Serial.println(" ug/m3");
+  Serial.print("PM10 concentration:");
+  Serial.print(PM10);
+  Serial.println(" ug/m3");
+  Serial.println();
+  delay(1000);
 }
 
 /*****************************  getTurbidityData *********************************************
@@ -205,14 +259,14 @@ Input:   Digital Pin
 Output:   An integer value that represents TDS in ppm
 Remarks:   Utilizes getMedianNum()
 ************************************************************************************/
-int getTempHumidityData(uint8_t DHT_PIN){
-  //int chk = DHT.read11(DHT_PIN);
-  Serial.print("Temperature = ");
-  Serial.println(dht.readTemperature(true));
-  Serial.print("Humidity = ");
-  Serial.println(dht.readHumidity());
-  // delay(1000);  
-}
+//int getTempHumidityData(uint8_t DHT_PIN){
+//  //int chk = DHT.read11(DHT_PIN);
+//  Serial.print("Temperature = ");
+//  Serial.println(dht.readTemperature(true));
+//  Serial.print("Humidity = ");
+//  Serial.println(dht.readHumidity());
+//  // delay(1000);  
+//}
 
 /*****************************  getTDSData *********************************************
 Input:   Analog Pin
@@ -221,8 +275,7 @@ Remarks:   Utilizes getMedianNum()
 ************************************************************************************/
 int getTDSData(uint8_t TDS_PIN){
   static unsigned long analogSampleTimepoint = millis();
-   if(millis()-analogSampleTimepoint > 40U)     //every 40 milliseconds,read the analog value from the ADC
-   {
+   if(millis()-analogSampleTimepoint > 40U){     //every 40 milliseconds,read the analog value from the ADC
      analogSampleTimepoint = millis();
      analogBuffer[analogBufferIndex] = analogRead(TDS_PIN);    //read the analog value and store into the buffer
      analogBufferIndex++;
@@ -230,8 +283,7 @@ int getTDSData(uint8_t TDS_PIN){
          analogBufferIndex = 0;
    }   
    static unsigned long printTimepoint = millis();
-   if(millis()-printTimepoint > 800U)
-   {
+   if(millis()-printTimepoint > 800U){
       printTimepoint = millis();
       for(copyIndex=0;copyIndex<SCOUNT;copyIndex++)
         analogBufferTemp[copyIndex]= analogBuffer[copyIndex];
@@ -258,19 +310,16 @@ int getMedianNum(int bArray[], int iFilterLen)
 {
       int bTab[iFilterLen];
       for (byte i = 0; i<iFilterLen; i++)
-      bTab[i] = bArray[i];
+        bTab[i] = bArray[i];
       int i, j, bTemp;
-      for (j = 0; j < iFilterLen - 1; j++) 
-      {
-      for (i = 0; i < iFilterLen - j - 1; i++) 
-          {
-        if (bTab[i] > bTab[i + 1]) 
-            {
-        bTemp = bTab[i];
-            bTab[i] = bTab[i + 1];
-        bTab[i + 1] = bTemp;
-         }
-      }
+      for (j = 0; j < iFilterLen - 1; j++){
+        for (i = 0; i < iFilterLen - j - 1; i++){
+          if (bTab[i] > bTab[i + 1]){
+          bTemp = bTab[i];
+              bTab[i] = bTab[i + 1];
+          bTab[i + 1] = bTemp;
+           }
+        }
       }
       if ((iFilterLen & 1) > 0)
     bTemp = bTab[(iFilterLen - 1) / 2];
