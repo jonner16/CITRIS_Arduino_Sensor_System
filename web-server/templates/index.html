@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>CSV Upload</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+	<script>
+		// Reload the page every minute
+		setInterval(function() {
+			location.reload();
+		}, 60000);
+	</script>
+</head>
+<body>
+	<h1>Upload a CSV File</h1>
+	<form method="POST" action="{{ url_for('display_csv') }}" enctype="multipart/form-data">
+		<input type="file" name="csv_file" accept=".csv">
+		<button type="submit">Submit</button>
+	</form>
+</body>
+</html>
