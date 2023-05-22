@@ -2,7 +2,6 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Wire.h>  // Include the Wire library for I2C communication
-#include <DHT.h>
 #include "DHT.h"
 #include "DFRobot_OxygenSensor.h"
 #include "Seeed_BME280.h"  // Include the BME280 library
@@ -23,15 +22,17 @@ const uint64_t pipe = 0xE8E8F0F0E1LL;
 
 #define DHTTYPE DHT11
 
-DHT dht(DHT11_PIN_0, DHTTYPE);
+DHT dht_0(DHT11_PIN_0, DHTTYPE);
+DHT dht_1(DHT11_PIN_1, DHTTYPE);
+DHT dht_2(DHT11_PIN_2, DHTTYPE);
 
 // Define variables for Turbidity:
 #define TURBIDITY_PIN_0 A5
+#define TURBIDITY_PIN_1 A6
 
 // Define variables for HC-204:
 int heightInCm;
 long duration;
-int tankHeight[4];
 
 #define TRIG_PIN_0 46
 #define ECHO_PIN_0 47
@@ -46,7 +47,6 @@ int tankHeight[4];
 #define ECHO_PIN_3 41
 
 // Define values for Oxygen Sensor:
-int OxConc;
 #define COLLECT_NUMBER 10  // collect number, the collection range is 1-100.
 #define Oxygen_IICAddress_0 ADDRESS_3
 #define Oxygen_IICAddress_1 ADDRESS_2
@@ -56,7 +56,6 @@ DFRobot_OxygenSensor Oxygen_1;
 DFRobot_OxygenSensor Oxygen_2;
 
 // Define values for Air Quality Sensor:
-int airQuality;
 #define AIR_SENSOR_PIN_0 A0  // Define the pin connected to the sensor data pin
 #define AIR_SENSOR_PIN_1 A1
 #define AIR_SENSOR_PIN_2 A2
@@ -72,7 +71,6 @@ int analogBufferIndex = 0,copyIndex = 0;
 float averageVoltage = 0,tdsValue = 0,temperature = 25;
 
 // Define values for CO2 Sensor:
-int CO2Conc[3];
 /************************Hardware Related Macros************************************/
 #define MG_PIN_0 (A15)  //define which analog input channel you are going to use
 #define MG_PIN_1 (A14)  //define which analog input channel you are going to use
@@ -91,6 +89,21 @@ int CO2Conc[3];
 
 /*****************************Globals***********************************************/
 float CO2Curve[3] = { 2.602, ZERO_POINT_VOLTAGE, (REACTION_VOLTGAE / (2.602 - 3)) };
+
+
+/**
+ Arrays for sensor values
+**/
+int TDS[2];
+int tankHeight[4];
+int turbidity[2];
+int pH[2];
+int airQuality[3];
+int CO2Conc[3];
+int temp[3];
+int humidity[3];
+int particle[3];
+int OxConc[3];
 
 void setup() {
   Serial.begin(9600);
@@ -123,8 +136,13 @@ void setup() {
   //   Serial.print("I2c device 2 number error !");
   //   delay(1000);
   // }
-  
-  // dht.begin();
+
+  //For Temp and Humidity Sensor
+    Serial.println("Setting up: DHT-11");
+  dht_0.begin();
+  dht_1.begin();
+  dht_2.begin();
+
   //For Air Quality Sensor
   Serial.println("Setting up: AQS");
   Wire.begin();
@@ -165,21 +183,45 @@ void loop() {
   // Serial.print(heightInCm);
   // Serial.print("\n");
 
-  // CO2Conc[0] = getCO2Data(MG_PIN_0); 
-  // CO2Conc[1] = getCO2Data(MG_PIN_1); 
-  // CO2Conc[2] = getCO2Data(MG_PIN_2);
-  
+  // TDS[0] = getTDSData(TDS_SENSOR_PIN_0);
+  // TDS[1] = getTDSData(TDS_SENSOR_PIN_1);
+
   // tankHeight[0] = getWaterHeight(TRIG_PIN_0, ECHO_PIN_0);
   // tankHeight[1] = getWaterHeight(TRIG_PIN_1, ECHO_PIN_1);
   // tankHeight[2] = getWaterHeight(TRIG_PIN_2, ECHO_PIN_2);
   // tankHeight[3] = getWaterHeight(TRIG_PIN_3, ECHO_PIN_3);
-
-  // getTDSData(TDS_SENSOR_PIN_0);
   
-  // getTurbidityData(TURBIDITY_PIN_0);
+  // turbidity[0] = getTurbidityData(TURBIDITY_PIN_0);
+  // turbidity[1] = getTurbidityData(TURBIDITY_PIN_1);
 
-  // getTempHumidityData(DHT11_PIN_0);
+  // PH GOES HERE
+
+  // airQuality[0] = getAirQuality(AIR_SENSOR_PIN_0);
+  // airQuality[1] = getAirQuality(AIR_SENSOR_PIN_1);
+  // airQuality[2] = getAirQuality(AIR_SENSOR_PIN_2);
+
+  // CO2Conc[0] = getCO2Data(MG_PIN_0); 
+  // CO2Conc[1] = getCO2Data(MG_PIN_1); 
+  // CO2Conc[2] = getCO2Data(MG_PIN_2);
   
+  // temp[0] = getTempData(DHT11_PIN_0);
+  // temp[1] = getTempData(DHT11_PIN_1);
+  // temp[2] = getTempData(DHT11_PIN_2);
+
+  // humidity[0] = getHumidityData(DHT11_PIN_0);
+  // humidity[1] = getHumidityData(DHT11_PIN_1);
+  // humidity[2] = getHumidityData(DHT11_PIN_2);
+
+  //PARTICLE COUNT GOES HERE 
+
+  // OxConc[0] = getOxygen(Oxygen_0);
+  // OxConc[1] = getOxygen(Oxygen_1);
+  // OxConc[2] = getOxygen(Oxygen_2);
+  
+  // MAKE A FUNCTION THAT DOES ALL THE CSV OUTPUTTING STUFF AND CALL THAT FUNCTION HERE.
+
+  // delay(READ_DELAY);
+
   // Serial.print(getWaterHeight(TRIG_PIN_0, ECHO_PIN_0));
   // Serial.print(", ");
   // Serial.print(getWaterHeight(TRIG_PIN_1, ECHO_PIN_1));
@@ -187,6 +229,54 @@ void loop() {
   // Serial.print(getWaterHeight(TRIG_PIN_2, ECHO_PIN_2));
   // Serial.print(", ");
   // Serial.println(getWaterHeight(TRIG_PIN_3, ECHO_PIN_3));
+}
+
+
+/*****************************  outputSerial *********************************************
+Input:   all sensor values
+Output:   none
+Remarks:   takes all sensor info to output to serial
+************************************************************************************/
+int outputSerial(int TDS_1, int TDS_2, int w_height_1, int w_height_2, int w_height_3, int w_height_4, int turbidity_1, int turbidity_2, int pH_1, int pH_2, int AQS_1, int AQS_2, int AQS_3, int CO2_1, int CO2_2, int CO2_3, int temp_1, int temp_2, int temp_3, int humidity_1, int humidity_2, int humidity_3, int O2_1, int O2_2, int O2_3){
+
+}
+
+
+/*****************************  getTempData *********************************************
+Input:   dht object
+Output:   An integer value that represents temperature in farenheit.
+Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
+************************************************************************************/
+int getTempData(DHT dht){
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Read temperature as Fahrenheit
+  float f = dht.readTemperature(true);
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(f)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  return f;
+  // Wait a few seconds between measurements.
+  delay(2000);
+}
+
+/*****************************  getHumidityData *********************************************
+Input:   dht object
+Output:   An integer value that represents humidity as a percentage.
+Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
+************************************************************************************/
+int getHumidityData(DHT dht){
+  // Reading temperature or humidity takes about 250 milliseconds!
+  float h = dht.readHumidity();
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(h)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  return h;
+  // Wait a few seconds between measurements.
+  delay(2000);
 }
 
 /*****************************  getTurbidityData *********************************************
@@ -198,20 +288,6 @@ int getTurbidityData(uint8_t TURBIDITY_PIN){
   int sensorValue = analogRead(TURBIDITY_PIN);// read the input on analog pin 0:
   float voltage = sensorValue * (5.0 / 1024.0); // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
   return voltage;
-}
-
-/*****************************  getTempHumidityData *********************************************
-Input:   Digital Pin
-Output:   An integer value that represents TDS in ppm
-Remarks:   Utilizes getMedianNum()
-************************************************************************************/
-int getTempHumidityData(uint8_t DHT_PIN){
-  //int chk = DHT.read11(DHT_PIN);
-  Serial.print("Temperature = ");
-  Serial.println(dht.readTemperature(true));
-  Serial.print("Humidity = ");
-  Serial.println(dht.readHumidity());
-  // delay(1000);  
 }
 
 /*****************************  getTDSData *********************************************
