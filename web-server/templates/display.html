@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>CSV Data</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script>
+		$(document).ready(function() {
+			// Update the table data every minute
+			setInterval(function() {
+				$.get("/csv_data", function(data) {
+					$('#csv-data').html(data.table_html);
+				});
+			}, 60000);
+		});
+	</script>
+</head>
+<body>
+	<h1>CSV Data</h1>
+	<div id="csv-data">
+		<!-- The updated CSV data will be inserted here dynamically -->
+	</div>
+</body>
+</html>
