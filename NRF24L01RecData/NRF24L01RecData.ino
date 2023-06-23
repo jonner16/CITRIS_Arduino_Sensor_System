@@ -6,8 +6,9 @@
 #include "DFRobot_OxygenSensor.h"
 #include "DFRobot_AirQualitySensor.h"
 #include "Seeed_BME280.h"  // Include the BME280 library
+#include "GravityTDS.h"
 
-#define READ_DELAY 5000    // Define the delay between readings (in milliseconds) CHANGE TO 1 MIN
+#define READ_DELAY 1000    // Define the delay between readings (in milliseconds) CHANGE TO 1 MIN
 
 //Define variable for NRF24L01:
 #define CE_PIN 49   
@@ -27,10 +28,6 @@ DHT dht_0(DHT11_PIN_0, DHTTYPE);
 DHT dht_1(DHT11_PIN_1, DHTTYPE);
 DHT dht_2(DHT11_PIN_2, DHTTYPE);
 
-// Define variables for Turbidity:
-#define TURBIDITY_PIN_0 A5
-#define TURBIDITY_PIN_1 A6
-
 // Define variables for HC-204:
 int heightInCm;
 long duration;
@@ -49,44 +46,54 @@ long duration;
 
 // Define values for Oxygen Sensor:
 #define COLLECT_NUMBER 10  // collect number, the collection range is 1-100.
-#define Oxygen_IICAddress_0 ADDRESS_0
-#define Oxygen_IICAddress_1 ADDRESS_1
-#define Oxygen_IICAddress_2 ADDRESS_2
+#define Oxygen_IICAddress_0 ADDRESS_2
+#define Oxygen_IICAddress_1 ADDRESS_3
+#define Oxygen_IICAddress_2 ADDRESS_0
 
 DFRobot_OxygenSensor Oxygen_0;
 DFRobot_OxygenSensor Oxygen_1;
 DFRobot_OxygenSensor Oxygen_2;
 
+// Define values for I2C Mulltiplexer:
+#define MUX_ADDR 0x70
+// Define values for Particle Count Sensor: 
+#define PARTICLE_SENSOR_ADDR 0x19
+DFRobot_AirQualitySensor ParticleSensors[3] = {
+  DFRobot_AirQualitySensor(&Wire, PARTICLE_SENSOR_ADDR),
+  DFRobot_AirQualitySensor(&Wire, PARTICLE_SENSOR_ADDR),
+  DFRobot_AirQualitySensor(&Wire, PARTICLE_SENSOR_ADDR)
+};
 
-#define AirQuality_IICAddress_0 ADDRESS_3
-//#define AirQuality_IICAddress_1 
-//#define AirQuality_IICAddress_2 
-
-DFRobot_AirQualitySensor AirQualitySensor_0(&Wire ,AirQuality_IICAddress_0);
-
-
+// Function for I2C Multiplexer channel switching
+void channelSwitch(uint8_t bus){
+  Wire.beginTransmission(MUX_ADDR);  
+  Wire.write(1 << bus);          // send byte to select bus
+  Wire.endTransmission();
+}
 
 // Define values for Air Quality Sensor:
-#define AIR_SENSOR_PIN_0 A0  // Define the pin connected to the sensor data pin
-#define AIR_SENSOR_PIN_1 A1
-#define AIR_SENSOR_PIN_2 A2
+#define AIR_SENSOR_PIN_0 A4  // Define the pin connected to the sensor data pin
+#define AIR_SENSOR_PIN_1 A5
+#define AIR_SENSOR_PIN_2 A6
+
+// Define values for Turbidity Sensor:
+#define TURB_PIN_0 A2
+#define TURB_PIN_1 A3
 
 // Define values for TDS Sensor:
-#define TDS_SENSOR_PIN_0 A3
-#define TDS_SENSOR_PIN_1 A4
-#define VREF 5.0      // analog reference voltage(Volt) of the ADC
-#define SCOUNT  30           // sum of sample point
+#define TdsSensorPin_0 A0
+#define TdsSensorPin_1 A1
 
-int analogBuffer[SCOUNT];    // store the analog value in the array, read from ADC
-int analogBufferTemp[SCOUNT];
-int analogBufferIndex = 0,copyIndex = 0;
-float averageVoltage = 0,tdsValue = 0,temperature = 25;
+GravityTDS gravityTds_0;
+GravityTDS gravityTds_1;
+ 
+float temperature = 25,tdsValue_0 = 0, tdsValue_1 = 0;
 
 // Define values for CO2 Sensor:
 /************************Hardware Related Macros************************************/
-#define MG_PIN_0 (A15)  //define which analog input channel you are going to use
-#define MG_PIN_1 (A14)  //define which analog input channel you are going to use
-#define MG_PIN_2 (A13)  //define which analog input channel you are going to use
+#define MG_PIN_0 (A15)  
+#define MG_PIN_1 (A14)  
+#define MG_PIN_2 (A13)  
 #define BOOL_PIN (4)
 #define DC_GAIN (8.5)  //define the DC gain of amplifier
 
@@ -108,19 +115,70 @@ float CO2Curve[3] = { 2.602, ZERO_POINT_VOLTAGE, (REACTION_VOLTGAE / (2.602 - 3)
 **/
 int TDS[2];
 int tankHeight[4];
-int turbidity[2];
+float turbidity[2];
 int pH[2];
 int airQuality[3];
 int CO2Conc[3];
 int temp[3];
-int humidity[3];
+int hum[3];
 int particle[3];
 int OxConc[3];
 
 void setup() {
+  Wire.begin();
   Serial.begin(9600);
 
   Serial.println("Setting up everything.");
+
+  // Serial.println("Setting up: Particle Count Sensors");
+  for (int i = 0; i < 3; i++) {
+    channelSwitch(i);
+
+    delay(1000);
+
+    while (!ParticleSensors[i].begin()) {
+      Serial.print("No devices on channel ");
+      Serial.println(i);
+      delay(1000);
+    }
+    Serial.print("Particle Count Sensor ");
+    Serial.print(i);
+    Serial.println(" initialized.");
+  }
+
+  //For Oxygen Sensor
+  Serial.println("Setting up: Oxygen Sensors");
+  while (!Oxygen_0.begin(Oxygen_IICAddress_0)) {
+      Serial.print("I2c device 0 number error !");
+      delay(1000);
+  }
+  delay(1000);
+  Serial.println("Oxygen 1 done");
+  while (!Oxygen_1.begin(Oxygen_IICAddress_1)) {
+      Serial.print("I2c device 1 number error !");
+      delay(1000);
+    }
+    delay(1000);
+  Serial.println("Oxygen 2 done");
+  while (!Oxygen_2.begin(Oxygen_IICAddress_2)) {
+      Serial.print("I2c device 2 number error !");
+      delay(1000);
+    }
+  delay(1000);
+  Serial.println("Oxygen 3 done");
+    
+  // For TDS 
+    Serial.println("Setting up: TDS");
+    gravityTds_0.setPin(TdsSensorPin_0);
+    gravityTds_0.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
+    gravityTds_0.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
+    gravityTds_0.begin();  //initialization
+
+    gravityTds_1.setPin(TdsSensorPin_1);
+    gravityTds_1.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
+    gravityTds_1.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
+    gravityTds_1.begin();  //initialization
+
 
   //For HC-204
   Serial.println("Setting up: HC-204");
@@ -133,44 +191,14 @@ void setup() {
   pinMode(TRIG_PIN_3, OUTPUT);
   pinMode(ECHO_PIN_3, INPUT);
 
-  //For Oxygen Sensor
-  // Serial.println("Setting up: Oxygen Sensor");
-  // while (!Oxygen_0.begin(Oxygen_IICAddress_0)) {
-  //   Serial.print("I2c device 0 number error !");
-  //   delay(1000);
-  // }
-  
-  // while (!Oxygen_1.begin(Oxygen_IICAddress_1)) {
-  //   Serial.print("I2c device 1 number error !");
-  //   delay(1000);
-  // }
-  // while (!Oxygen_2.begin(Oxygen_IICAddress_2)) {
-  //   Serial.print("I2c device 2 number error !");
-  //   delay(1000);
-  // }
-
   //For Temp and Humidity Sensor
   Serial.println("Setting up: DHT-11");
   dht_0.begin();
   dht_1.begin();
   dht_2.begin();
-
-  Serial.println("Setting up: AirQualitySensor");
-  while(!AirQualitySensor_0.begin()){
-    Serial.println("NO Devices !");
-    delay(1000);
-  }
-  Serial.println("sensor begin success!");
-  delay(1000);
   
   //For Air Quality Sensor
   Serial.println("Setting up: AQS");
-  Wire.begin();
-
-  //For TDS Sensor
-  Serial.println("Setting up: TDS");
-  pinMode(TDS_SENSOR_PIN_0,INPUT);
-  pinMode(TDS_SENSOR_PIN_1,INPUT);
   
   //For CO2 Sensor
   Serial.println("Setting up: CO2");
@@ -189,81 +217,197 @@ void setup() {
 }
 
 void loop() {
-  // CO2Conc = getCO2Data(); 
-  // airQuality = getAirQuality();
-  // OxConc = getOxygen();
-  // delay(READ_DELAY);
-  // getNRFData();  
-  // Serial.print(CO2Conc);
-  // Serial.print(",");
-  // Serial.print(airQuality);
-  // Serial.print(",");
-  // Serial.print(OxConc);
-  // Serial.print(",");
-  // Serial.print(heightInCm);
-  // Serial.print("\n");
-
-  // TDS[0] = getTDSData(TDS_SENSOR_PIN_0);
-  // TDS[1] = getTDSData(TDS_SENSOR_PIN_1);
-
-  // tankHeight[0] = getWaterHeight(TRIG_PIN_0, ECHO_PIN_0);
-  // tankHeight[1] = getWaterHeight(TRIG_PIN_1, ECHO_PIN_1);
-  // tankHeight[2] = getWaterHeight(TRIG_PIN_2, ECHO_PIN_2);
-  // tankHeight[3] = getWaterHeight(TRIG_PIN_3, ECHO_PIN_3);
   
-  // turbidity[0] = getTurbidityData(TURBIDITY_PIN_0);
-  // turbidity[1] = getTurbidityData(TURBIDITY_PIN_1);
+  // turbidity[0] = getTurbidityData(TURB_PIN_0);
+  // delay(500);
+  // turbidity[1] = getTurbidityData(TURB_PIN_1); //Tap water
+
+  // Serial.print("Out Turb: ");
+  // Serial.print(turbidity[0]);
+  // Serial.println("");
+  // Serial.print("Tap Turb: ");
+  // Serial.print(turbidity[1]);
+  // Serial.println("");
 
   // PH GOES HERE
 
-  // airQuality[0] = getAirQuality(AIR_SENSOR_PIN_0);
-  // airQuality[1] = getAirQuality(AIR_SENSOR_PIN_1);
-  // airQuality[2] = getAirQuality(AIR_SENSOR_PIN_2);
+  tankHeight[0] = getWaterHeight(TRIG_PIN_0, ECHO_PIN_0);
+  delay(500);
+  tankHeight[1] = getWaterHeight(TRIG_PIN_1, ECHO_PIN_1);
+  delay(500);
+  tankHeight[2] = getWaterHeight(TRIG_PIN_2, ECHO_PIN_2);
+  delay(500);
+  tankHeight[3] = getWaterHeight(TRIG_PIN_3, ECHO_PIN_3);
+  delay(500);
 
-  // CO2Conc[0] = getCO2Data(MG_PIN_0); 
-  // CO2Conc[1] = getCO2Data(MG_PIN_1); 
-  // CO2Conc[2] = getCO2Data(MG_PIN_2);
+
+  airQuality[0] = getAirQuality(AIR_SENSOR_PIN_0);
+  delay(500);
+  airQuality[1] = getAirQuality(AIR_SENSOR_PIN_1);
+  delay(500);
+  airQuality[2] = getAirQuality(AIR_SENSOR_PIN_2);
+  delay(500);
+
+ CO2Conc[0] = getCO2Data(MG_PIN_0); 
+ delay(500);
+ CO2Conc[1] = getCO2Data(MG_PIN_1); 
+ delay(500);
+ CO2Conc[2] = getCO2Data(MG_PIN_2);
+ delay(500);
+
   
-  // temp[0] = getTempData(DHT11_PIN_0);
-  // temp[1] = getTempData(DHT11_PIN_1);
-  // temp[2] = getTempData(DHT11_PIN_2);
 
-  // humidity[0] = getHumidityData(DHT11_PIN_0);
-  // humidity[1] = getHumidityData(DHT11_PIN_1);
-  // humidity[2] = getHumidityData(DHT11_PIN_2);
+    temp[0] = getTempData(&dht_0);
+    delay(500);
+    temp[1] = getTempData(&dht_1);
+    delay(500);
+    temp[2] = getTempData(&dht_2);
+    delay(500);
+
+
+    hum[0] = getHumidityData(&dht_0);
+    delay(500);
+    hum[1] = getHumidityData(&dht_1);
+    delay(500);
+    hum[2] = getHumidityData(&dht_2);
+    delay(500);
+   
+      // temperature = readTemperature();  //add your temperature sensor and read it
+    gravityTds_0.setTemperature(temperature);  // set the temperature and execute temperature compensation
+    gravityTds_0.update();  //sample and calculate
+    tdsValue_0 = gravityTds_0.getTdsValue();  // then get the value
+    Serial.print(tdsValue_0,0);
+    Serial.print(",");
+    delay(1000);
+
+
+    //temperature = readTemperature();  //add your temperature sensor and read it
+    gravityTds_1.setTemperature(temperature);  // set the temperature and execute temperature compensation
+    gravityTds_1.update();  //sample and calculate
+    tdsValue_1 = gravityTds_1.getTdsValue();  // then get the value
+    Serial.print(tdsValue_1,0);
+    Serial.print(",");
+    delay(1000);
+
 
   //PARTICLE COUNT GOES HERE 
+  for (int i = 0; i < 3; i++) {
+    channelSwitch(i);
+    float PM2_5 = ParticleSensors[i].gainParticleConcentration_ugm3(PARTICLE_PM2_5_STANDARD);
+    float PM1_0 = ParticleSensors[i].gainParticleConcentration_ugm3(PARTICLE_PM1_0_STANDARD);
+    float PM10 = ParticleSensors[i].gainParticleConcentration_ugm3(PARTICLE_PM10_STANDARD);
 
-  // OxConc[0] = getOxygen(Oxygen_0);
-  // OxConc[1] = getOxygen(Oxygen_1);
-  // OxConc[2] = getOxygen(Oxygen_2);
+    Serial.print(PM2_5);
+    Serial.print(",");
+    Serial.print(PM1_0);
+    Serial.print(",");
+    Serial.print(PM10);
+
+    if (i < 2) {
+      Serial.print(",");
+    } else {
+      Serial.println();
+    }
+  }
+  delay(1000);
+
+  OxConc[0] = getOxygen(&Oxygen_0);
+  delay(500);
+  OxConc[1] = getOxygen(&Oxygen_1);
+  delay(500);
+  OxConc[2] = getOxygen(&Oxygen_2);
+  delay(500);
+
+ 
+  Serial.print(tankHeight[0]);
+ Serial.print(",");
+  delay(500);
+ Serial.print(tankHeight[1]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(tankHeight[2]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(tankHeight[3]);
+ Serial.print(",");
+  delay(500);
+
+ Serial.print(airQuality[0]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(airQuality[1]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(airQuality[2]);
+ Serial.print(",");
+  delay(500);
+
+ Serial.print(CO2Conc[0]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(CO2Conc[1]);
+ Serial.print(",");
+   delay(500);
+ Serial.print(CO2Conc[2]);
+ Serial.print(",");
+   delay(500);
   
-  // MAKE A FUNCTION THAT DOES ALL THE CSV OUTPUTTING STUFF AND CALL THAT FUNCTION HERE.
 
-  // delay(READ_DELAY);
+    Serial.print(temp[0]);
+    Serial.print(",");
+      delay(500);
+    Serial.print(temp[1]);
+    Serial.print(",");
+      delay(500);
+    Serial.print(temp[2]);
+    Serial.print(",");
+      delay(500);
 
-  // getTempHumidityData(DHT11_PIN_0);
 
-  // getAirQualitySensorData(AirQualitySensor_0);
+    Serial.print(hum[0]);
+    Serial.print(",");
+      delay(500);
+    Serial.print(hum[1]);
+    Serial.print(",");
+      delay(500);
+    Serial.print(hum[2]);
+    Serial.print(",");
+      delay(500);
+
+
+  Serial.print(OxConc[0]);
+  Serial.print(",");
+    delay(500);
+  Serial.print(OxConc[1]);
+  Serial.print(",");
+    delay(500);
+  Serial.print(OxConc[2]);
+    delay(500);
+
+  delay(READ_DELAY);
 
   // SERIAL PRINT AS CSV FORMAT
 
-  // Serial.print(getWaterHeight(TRIG_PIN_0, ECHO_PIN_0));
-  // Serial.print(", ");
-  // Serial.print(getWaterHeight(TRIG_PIN_1, ECHO_PIN_1));
-  // Serial.print(", ");
-  // Serial.print(getWaterHeight(TRIG_PIN_2, ECHO_PIN_2));
-  // Serial.print(", ");
-  // Serial.println(getWaterHeight(TRIG_PIN_3, ECHO_PIN_3));
+
 }
 
+/*****************************  getOxygen **********************************
+Input:   None
+Output:   An integer which represents an analog read of air sensor
+Remarks:   This is calling the getOxygenData function from the DFRobot library.
+************************************************************************************/
+float getOxygen(DFRobot_OxygenSensor* Oxygen) {
+  float oxygenData = Oxygen->getOxygenData(COLLECT_NUMBER);
+  delay(1000);
+  return oxygenData;
+}
 
 /*****************************  outputSerial *********************************************
 Input:   all sensor values
 Output:   none
 Remarks:   takes all sensor info to output to serial
 ************************************************************************************/
-int outputSerial(int TDS_1, int TDS_2, int w_height_1, int w_height_2, int w_height_3, int w_height_4, int turbidity_1, int turbidity_2, int pH_1, int pH_2, int AQS_1, int AQS_2, int AQS_3, int CO2_1, int CO2_2, int CO2_3, int temp_1, int temp_2, int temp_3, int humidity_1, int humidity_2, int humidity_3, int O2_1, int O2_2, int O2_3){
+int outputSerial(){
 
 }
 
@@ -273,14 +417,14 @@ Input:   dht object
 Output:   An integer value that represents temperature in farenheit.
 Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
 ************************************************************************************/
-int getTempData(DHT dht){
+int getTempData(DHT* dht){
   // Reading temperature or humidity takes about 250 milliseconds!
   // Read temperature as Fahrenheit
-  float f = dht.readTemperature(true);
+  float f = dht->readTemperature(true);
   // Check if any reads failed and exit early (to try again).
   if (isnan(f)) {
     Serial.println("Failed to read from DHT sensor!");
-    return;
+    return -1; //ERROR
   }
   return f;
   // Wait a few seconds between measurements.
@@ -292,13 +436,13 @@ Input:   dht object
 Output:   An integer value that represents humidity as a percentage.
 Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
 ************************************************************************************/
-int getHumidityData(DHT dht){
+int getHumidityData(DHT* dht){
   // Reading temperature or humidity takes about 250 milliseconds!
-  float h = dht.readHumidity();
+  float h = dht->readHumidity();
   // Check if any reads failed and exit early (to try again).
   if (isnan(h)) {
     Serial.println("Failed to read from DHT sensor!");
-    return;
+    return -1; //ERROR 
   }
   return h;
   // Wait a few seconds between measurements.
@@ -306,117 +450,17 @@ int getHumidityData(DHT dht){
 }
 
 
-int getAirQualitySensorData(DFRobot_AirQualitySensor AQS){
-  /**
- *@brief : Get concentration of PM1.0 PM2.5 PM10
- *@param :PARTICLE_PM1_0_STANDARD  Standard particle  
-          PARTICLE_PM2_5_STANDARD  Standard particle  
-          PARTICLE_PM10_STANDARD   Standard particle 
-          PARTICLE_PM1_0_ATMOSPHERE  In atmospheric environment
-          PARTICLE_PM2_5_ATMOSPHERE  In atmospheric environment
-          PARTICLE_PM10_ATMOSPHERE   In atmospheric environment
-*/  
-  uint16_t PM2_5 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM2_5_STANDARD);
-  uint16_t PM1_0 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM1_0_STANDARD);
-  uint16_t PM10 = AQS.gainParticleConcentration_ugm3(PARTICLE_PM10_STANDARD);
-  Serial.print("PM2.5 concentration:");
-  Serial.print(PM2_5);
-  Serial.println(" ug/m3");
-  Serial.print("PM1.0 concentration:");
-  Serial.print(PM1_0);
-  Serial.println(" ug/m3");
-  Serial.print("PM10 concentration:");
-  Serial.print(PM10);
-  Serial.println(" ug/m3");
-  Serial.println();
-  delay(1000);
-}
-
 /*****************************  getTurbidityData *********************************************
 Input:   Analog Pin
 Output:   An integer value that represents Turbidity as a voltage.
 Remarks:   
 ************************************************************************************/
-int getTurbidityData(uint8_t TURBIDITY_PIN){
+float getTurbidityData(uint8_t TURBIDITY_PIN){
   int sensorValue = analogRead(TURBIDITY_PIN);// read the input on analog pin 0:
   float voltage = sensorValue * (5.0 / 1024.0); // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
   return voltage;
 }
 
-/*****************************  getTempHumidityData *********************************************
-Input:   Digital Pin
-Output:   An integer value that represents TDS in ppm
-Remarks:   Utilizes getMedianNum()
-************************************************************************************/
-//int getTempHumidityData(uint8_t DHT_PIN){
-//  //int chk = DHT.read11(DHT_PIN);
-//  Serial.print("Temperature = ");
-//  Serial.println(dht.readTemperature(true));
-//  Serial.print("Humidity = ");
-//  Serial.println(dht.readHumidity());
-//  // delay(1000);  
-//}
-
-
-/*****************************  getTDSData *********************************************
-Input:   Analog Pin
-Output:   An integer value that represents TDS in ppm
-Remarks:   Utilizes getMedianNum()
-************************************************************************************/
-int getTDSData(uint8_t TDS_PIN){
-  static unsigned long analogSampleTimepoint = millis();
-   if(millis()-analogSampleTimepoint > 40U){     //every 40 milliseconds,read the analog value from the ADC
-     analogSampleTimepoint = millis();
-     analogBuffer[analogBufferIndex] = analogRead(TDS_PIN);    //read the analog value and store into the buffer
-     analogBufferIndex++;
-     if(analogBufferIndex == SCOUNT) 
-         analogBufferIndex = 0;
-   }   
-   static unsigned long printTimepoint = millis();
-   if(millis()-printTimepoint > 800U){
-      printTimepoint = millis();
-      for(copyIndex=0;copyIndex<SCOUNT;copyIndex++)
-        analogBufferTemp[copyIndex]= analogBuffer[copyIndex];
-      averageVoltage = getMedianNum(analogBufferTemp,SCOUNT) * (float)VREF / 1024.0; // read the analog value more stable by the median filtering algorithm, and convert to voltage value
-      float compensationCoefficient=1.0+0.02*(temperature-25.0);    //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
-      float compensationVolatge=averageVoltage/compensationCoefficient;  //temperature compensation
-      tdsValue=(133.42*compensationVolatge*compensationVolatge*compensationVolatge - 255.86*compensationVolatge*compensationVolatge + 857.39*compensationVolatge)*0.5; //convert voltage value to tds value
-      //Serial.print("voltage:");
-      //Serial.print(averageVoltage,2);
-      //Serial.print("V   ");
-      Serial.print("TDS Value:");
-      Serial.print(tdsValue,0);
-      Serial.println("ppm");
-      return tdsValue;
-   }
-}
-
-/*****************************  getMedianNum *********************************************
-Input:   
-Output:   
-Remarks:   Helper function for getTDSData()
-************************************************************************************/
-int getMedianNum(int bArray[], int iFilterLen) 
-{
-      int bTab[iFilterLen];
-      for (byte i = 0; i<iFilterLen; i++)
-        bTab[i] = bArray[i];
-      int i, j, bTemp;
-      for (j = 0; j < iFilterLen - 1; j++){
-        for (i = 0; i < iFilterLen - j - 1; i++){
-          if (bTab[i] > bTab[i + 1]){
-          bTemp = bTab[i];
-              bTab[i] = bTab[i + 1];
-          bTab[i + 1] = bTemp;
-           }
-        }
-      }
-      if ((iFilterLen & 1) > 0)
-    bTemp = bTab[(iFilterLen - 1) / 2];
-      else
-    bTemp = (bTab[iFilterLen / 2] + bTab[iFilterLen / 2 - 1]) / 2;
-      return bTemp;
-}
 
 /*****************************  getCO2Data *********************************************
 Input:   None
@@ -431,26 +475,6 @@ int getCO2Data(uint8_t MG_PIN) {
   percentage = getMGPercentage(volts, CO2Curve);
   // delay(500);
   return (percentage == -1) ? 400 : percentage; // if == -1 that means less than 400 ppm
-  // Serial.print( "SEN0159:" );
-  // Serial.print(volts);
-  // Serial.print( "V           " );
-  // Serial.print("CO2:");
-  // if (percentage == -1) {
-  //     Serial.print( "<400" );
-  // } else {
-  //     Serial.print(percentage);
-  // }
-
-  // Serial.print( "ppm" );
-  // Serial.print("\n");
-
-  // if (digitalRead(BOOL_PIN) ){
-  //     Serial.print( "=====BOOL is HIGH======" );
-  // } else {
-  //     Serial.print( "=====BOOL is LOW======" );
-  // }
-
-  // Serial.print("\n");
 }
 
 /*****************************  getMG *********************************************
@@ -492,25 +516,10 @@ Output:   analog read of air sensor
 Remarks:   This is a simple analog reading.
 ************************************************************************************/
 int getAirQuality(uint8_t AIR_SENSOR_PIN) {
-  int airQuality = analogRead(AIR_SENSOR_PIN);  // Read the analog value from the sensor pin              // Print the value to the Serial Monitor
+  int airQuality = analogRead(AIR_SENSOR_PIN);  // Read the analog value from the sensor pin        
   return airQuality;
-  // Serial.print("Air quality: ");
-  // Serial.println(airQuality);
 }
 
-/*****************************  getOxygen **********************************
-Input:   None
-Output:   An integer which represents an analog read of air sensor
-Remarks:   This is calling the getOxygenData function from the DFRobot library.
-************************************************************************************/
-int getOxygen(DFRobot_OxygenSensor Oxygen) {
-  float oxygenData = Oxygen.getOxygenData(COLLECT_NUMBER);
-  // delay(1000);
-  return oxygenData;
-  // Serial.print(" Oxygen concentration is ");
-  // Serial.print(oxygenData);
-  // Serial.println(" %vol");
-}
 
 /*****************************  getWaterHeight **********************************
 Input:   None
