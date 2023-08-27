@@ -1,0 +1,57 @@
+TDS,TDS,
+Water Height,Water Height,Water Height,Water Height,
+Turbidity,Turbidity,
+pH,pH,
+AQS,AQS,AQS,
+CO2,CO2,CO2,
+Temp,Temp,Temp,
+Humidity,Humidity,Humidity,
+Particle Count,Particle Count,Particle Count,
+O2,O2,O2
+
+int TDS[2];
+int tankHeight[4];
+int turbidity[2];
+int pH[2];
+int airQuality[3];
+int CO2Conc[3];
+int temp[3];
+int humidity[3];
+int particle[3];
+int OxConc[3];
+
+
+Grab all the months csv files
+
+average all the values from each day and average each day in the month 
+
+display all the values as a graph
+
+
+at the end of day average the data into the last row of the csv
+
+
+TDS 0, TDS 1, Water Height 0, Water Height 1, Water Height 2, Water Height 3, Turbidity 0, Turbidity 1, pH 0, pH 1, AQS 0, AQS 1, AQS 2, CO2 0, CO2 1, CO2 2, Temp 0, Temp 1, Temp 2, Humidity 0, Humidity 1, Humidity 2, Particle Count 0, Particle Count 1, Particle Count 2, O2 0, O2 1, O2 2
+
+Water Tank Widget = Linear gauge single color
+
+Temperature Widget = Linear gauge 3 colors
+
+Humidity Widget = Dial 3 colors
+
+TDS Widget = Dial 3 colors
+
+AQS Widget = Dial 
+
+Particle count widget = 3 progress bars: PM2.5, PM1.0, PM10
+
+pH - Linear Gauge 2 color
+
+O2 - Dial 2 color 0-25%
+
+C02 - PPM
+
+Replace with date range
+
+
+
