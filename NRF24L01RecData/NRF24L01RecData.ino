@@ -2,11 +2,13 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Wire.h>  // Include the Wire library for I2C communication
+#include <EEPROM.h>
 #include "DHT.h"
 #include "DFRobot_OxygenSensor.h"
 #include "DFRobot_AirQualitySensor.h"
 #include "Seeed_BME280.h"  // Include the BME280 library
 #include "GravityTDS.h"
+#include "DFRobot_PH.h"
 
 #define READ_DELAY 1000    // Define the delay between readings (in milliseconds) CHANGE TO 1 MIN
 
@@ -27,6 +29,12 @@ const uint64_t pipe = 0xE8E8F0F0E1LL;
 DHT dht_0(DHT11_PIN_0, DHTTYPE);
 DHT dht_1(DHT11_PIN_1, DHTTYPE);
 DHT dht_2(DHT11_PIN_2, DHTTYPE);
+
+#define PH_PIN_0 A8
+#define PH_PIN_1 A9
+float voltage, ph_value;
+DFRobot_PH PH_0;
+DFRobot_PH PH_1;
 
 // Define variables for HC-204:
 int heightInCm;
@@ -116,21 +124,23 @@ float CO2Curve[3] = { 2.602, ZERO_POINT_VOLTAGE, (REACTION_VOLTGAE / (2.602 - 3)
 int TDS[2];
 int tankHeight[4];
 float turbidity[2];
-int pH[2];
+float pH[2];
 int airQuality[3];
 int CO2Conc[3];
-int temp[3];
-int hum[3];
-int particle[3];
-int OxConc[3];
+float temp[3];
+float hum[3];
+float particle[3];
+float OxConc[3];
 
 void setup() {
   Wire.begin();
   Serial.begin(9600);
-
+  Serial.println("*************");
+  Serial.println("*************");
+  Serial.println("*************");
   Serial.println("Setting up everything.");
 
-  // Serial.println("Setting up: Particle Count Sensors");
+  Serial.println("Setting up: Particle Count Sensors");
   for (int i = 0; i < 3; i++) {
     channelSwitch(i);
 
@@ -179,6 +189,10 @@ void setup() {
     gravityTds_1.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
     gravityTds_1.begin();  //initialization
 
+  // For PH 
+  Serial.println("Setting up: PH");
+  PH_0.begin();
+  PH_1.begin();
 
   //For HC-204
   Serial.println("Setting up: HC-204");
@@ -217,19 +231,21 @@ void setup() {
 }
 
 void loop() {
-  
-  // turbidity[0] = getTurbidityData(TURB_PIN_0);
-  // delay(500);
-  // turbidity[1] = getTurbidityData(TURB_PIN_1); //Tap water
+  turbidity[0] = getTurbidityData(TURB_PIN_0);
+  turbidity[1] = getTurbidityData(TURB_PIN_1); //Tap water
 
-  // Serial.print("Out Turb: ");
-  // Serial.print(turbidity[0]);
-  // Serial.println("");
-  // Serial.print("Tap Turb: ");
-  // Serial.print(turbidity[1]);
-  // Serial.println("");
+  Serial.print(turbidity[0]);
+  Serial.print(",");
+  Serial.print(turbidity[1]);
+  Serial.print(",");
 
-  // PH GOES HERE
+  pH[0] = getPHData(&PH_0, PH_PIN_0);
+  pH[1] = getPHData(&PH_1, PH_PIN_1);
+
+  Serial.print(pH[0]);
+  Serial.print(",");
+  Serial.print(pH[1]);
+  Serial.print(",");
 
   tankHeight[0] = getWaterHeight(TRIG_PIN_0, ECHO_PIN_0);
   delay(500);
@@ -303,11 +319,11 @@ void loop() {
     Serial.print(",");
     Serial.print(PM10);
 
-    if (i < 2) {
-      Serial.print(",");
-    } else {
-      Serial.println();
-    }
+    // if (i < 2) {
+    //   Serial.print(",");
+    // } else {
+    //   Serial.println();
+    // }
   }
   delay(1000);
 
@@ -385,10 +401,8 @@ void loop() {
     delay(500);
 
   delay(READ_DELAY);
-
+  Serial.println("");
   // SERIAL PRINT AS CSV FORMAT
-
-
 }
 
 /*****************************  getOxygen **********************************
@@ -402,28 +416,18 @@ float getOxygen(DFRobot_OxygenSensor* Oxygen) {
   return oxygenData;
 }
 
-/*****************************  outputSerial *********************************************
-Input:   all sensor values
-Output:   none
-Remarks:   takes all sensor info to output to serial
-************************************************************************************/
-int outputSerial(){
-
-}
-
 
 /*****************************  getTempData *********************************************
 Input:   dht object
 Output:   An integer value that represents temperature in farenheit.
 Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
 ************************************************************************************/
-int getTempData(DHT* dht){
+float getTempData(DHT* dht){
   // Reading temperature or humidity takes about 250 milliseconds!
   // Read temperature as Fahrenheit
   float f = dht->readTemperature(true);
   // Check if any reads failed and exit early (to try again).
   if (isnan(f)) {
-    Serial.println("Failed to read from DHT sensor!");
     return -1; //ERROR
   }
   return f;
@@ -436,17 +440,30 @@ Input:   dht object
 Output:   An integer value that represents humidity as a percentage.
 Remarks:   Sensor readings may be up to 2 seconds 'old' (its a very slow sensor)
 ************************************************************************************/
-int getHumidityData(DHT* dht){
+float getHumidityData(DHT* dht){
   // Reading temperature or humidity takes about 250 milliseconds!
   float h = dht->readHumidity();
   // Check if any reads failed and exit early (to try again).
   if (isnan(h)) {
-    Serial.println("Failed to read from DHT sensor!");
     return -1; //ERROR 
   }
+
+  delay(2000);
   return h;
   // Wait a few seconds between measurements.
-  delay(2000);
+
+}
+
+/*****************************  getPHData *********************************************
+Input:   DFRobot_PH pointer
+Output:   
+Remarks:   
+************************************************************************************/
+float getPHData(DFRobot_PH* ph, uint8_t ph_pin){
+  voltage = analogRead(ph_pin)/1024.0*5000;
+  ph_value = ph->readPH(voltage,temperature);
+  delay(1000);
+  return ph_value;
 }
 
 
@@ -455,10 +472,12 @@ Input:   Analog Pin
 Output:   An integer value that represents Turbidity as a voltage.
 Remarks:   
 ************************************************************************************/
-float getTurbidityData(uint8_t TURBIDITY_PIN){
-  int sensorValue = analogRead(TURBIDITY_PIN);// read the input on analog pin 0:
-  float voltage = sensorValue * (5.0 / 1024.0); // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
+float getTurbidityData(uint8_t analogPin){
+  int sensorValue = analogRead(analogPin);// read the input on analog pin 0:
+  float voltage = abs((sensorValue * (5.0 / 1024.0)) - 5.0); // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
+  // Serial.println(voltage); // print out the value you read:
   return voltage;
+  delay(500);
 }
 
 
