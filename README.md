@@ -15,4 +15,3 @@ This code works by accessing the information from the serial port that the Ardui
 #### Web Application
 The idea behind this application is that it will access the .csv files from the Python script and continuously update a GUI which displays all the sensor information. 
 
-Figma Link: https://www.figma.com/file/nWNJIhEkAPbU1ASkIq7kTz/CITRIS-Software-Layout?node-id=0%3A1&t=cDcoa1VLyBcIUr4z-1

@@ -15,7 +15,8 @@ import plotly.express as px
 import numpy as np
 import panel as pn
 import pandas as pd
-from datetime import date, datetime
+import datetime
+from datetime import date, datetime, timedelta
 import holoviews as hv
 
 from awesome_panel import config
@@ -27,12 +28,12 @@ STYLE = """
 """
 
 SENSOR_NAMES = [
-    "TDS 0","TDS 1","Water Height 0","Water Height 1",
-    "Water Height 2","Water Height 3","Turbidity 0",
-    "Turbidity 1","pH 0","pH 1","AQS 0","AQS 1","AQS 2",
-    "CO2 0","CO2 1","CO2 2","Temp 0","Temp 1","Temp 2",
-    "Humidity 0","Humidity 1","Humidity 2","Particle Count 0",
-    "Particle Count 1","Particle Count 2","O2 0","O2 1","O2 2"
+    "TDS 0", "TDS 1", "Water Height 0", "Water Height 1",
+    "Water Height 2", "Water Height 3", "Turbidity 0",
+    "Turbidity 1", "pH 0", "pH 1", "AQS 0", "AQS 1", "AQS 2",
+    "CO2 0", "CO2 1", "CO2 2", "Temp 0", "Temp 1", "Temp 2",
+    "Humidity 0", "Humidity 1", "Humidity 2", "Particle Count 0",
+    "Particle Count 1", "Particle Count 2", "O2 0", "O2 1", "O2 2"
 ]
 # THERE CAN BE NO CONFLICTS IN THE TITLES*** OR NAMES***** OF THE SENSORS
 SENSOR_TITLES = {
@@ -99,7 +100,7 @@ SENSOR_TITLES = {
 
 ACCENT = config.PALETTE[3]
 OK_COLOR = config.PALETTE[2]
-BAD_COLOR = config.PALETTE[1] # MAKE THIS YELLOW
+BAD_COLOR = config.PALETTE[1]  # MAKE THIS YELLOW
 ERROR_COLOR = config.PALETTE[3]
 
 app = config.extension(url="fast_grid_template", template=None, intro_section=False)
@@ -107,17 +108,18 @@ app = config.extension(url="fast_grid_template", template=None, intro_section=Fa
 app_html = "http://localhost:5006/visualize?theme=dark"
 
 HEADER = [pn.Row(
-        pn.layout.Spacer(sizing_mode="stretch_width"),
-        pn.layout.VSpacer(width=4),
-        height=86,
-        sizing_mode="stretch_width",
-    )]
+    pn.layout.Spacer(sizing_mode="stretch_width"),
+    pn.layout.VSpacer(width=4),
+    height=86,
+    sizing_mode="stretch_width",
+)]
 
 if not STYLE in pn.config.raw_css:
     pn.config.raw_css.append(STYLE)
 
+
 def get_average_data(sensor, selected_date):
-    if(selected_date == None):
+    if (selected_date == None):
         selected_date = datetime.now().strftime('%Y-%m-%d')
     else:
         selected_date = selected_date.strftime('%Y-%m-%d')
@@ -127,15 +129,15 @@ def get_average_data(sensor, selected_date):
 
     # Filter files that belong to the selected month
     current_month_files = [filename for filename in files if filename.startswith(selected_date[:7])]
-    
+
     days = []
     avg_values = []
-    
+
     for filename in current_month_files:
         file_path = os.path.join(folder_path, filename)
         try:
             df = pd.read_csv(file_path)
-            avg_value = df[sensor].mean() 
+            avg_value = df[sensor].mean()
             days.append(filename[:-4])
             avg_values.append(avg_value)
 
@@ -146,8 +148,9 @@ def get_average_data(sensor, selected_date):
 
     return df_plot
 
+
 def get_current_value(card_name):
-    #May want to implement a bidirectional dictionary for "instant" lookup
+    # May want to implement a bidirectional dictionary for "instant" lookup
     card_name = next((name for name, t in SENSOR_TITLES.items() if t == card_name), None)
     current_date = datetime.now().strftime('%Y-%m-%d')
     file_path = f'{current_date}.csv'
@@ -164,9 +167,11 @@ def _create_callback(cards):
     async def update_card():
         index = 0
         for card in cards:
-            card.value = get_current_value(card.name) #will come back to this index thing
+            card.value = get_current_value(card.name)  # will come back to this index thing
             index += 1
+
     return update_card
+
 
 def create_sensor_card(title, value, colors):
     if "Water" in title or "Temp" in title or "pH" in title:
@@ -175,18 +180,20 @@ def create_sensor_card(title, value, colors):
             value=value,
             # bounds=(0, 100),  # Change these bounds as needed
             show_boundaries=True,
-            height=650,
-            width=300,
+            # row_height=140,
             colors=colors,
+            # title_size="100px",
+            width=200,
+            height=350,
             css_classes=["pn-stats-card"],
         )
     elif "TDS" in title or "AQS" in title or "Humidity" in title or "O2" in title or "CO2" in title:
-        indicator = pn.indicators.Dial(
+        indicator = pn.indicators.Gauge(
             name=title,
             value=value,
             # annulus_width=10,
             # height=600,
-            # width=300,
+            # width=200,
             # bounds=(0, 100),  # Change these bounds as needed
             show_boundaries=True,
             colors=colors,
@@ -213,25 +220,22 @@ def create_sensor_card(title, value, colors):
     return indicator
 
 
-# def create_sensor_card(title, value, colors):
-#     indicator = pn.indicators.Number(
-#         name=title,
-#         value=value,
-#         colors=colors,
-#         css_classes=["pn-stats-card"],
-#     )
-#     return indicator
+SIDEBAR = pn.Column(
+    pn.pane.Markdown("## This is where you will find all the info on the home\'s sensor system."),
+    pn.pane.Markdown("## Feel free to resize and move any and every icon to your liking."),
+    pn.pane.Markdown("## Scroll down to see historical averages."),
+    sizing_mode="stretch_both"
+)
 
 def create_app() -> pn.template.FastGridTemplate:
     """Returns an app"""
-
-    #Initializes the template
+    # Initializes the template
     template = pn.template.FastGridTemplate(
         site="CITRIS",
         title="Sensor Streaming Dashboard",
         row_height=200,
         row_width=100,
-        # sidebar=SIDEBAR,
+        sidebar=SIDEBAR,
         sidebar_footer=config.menu_fast_html(app_html="", accent=ACCENT),
         accent_base_color=ACCENT,
         header_background=ACCENT,
@@ -240,43 +244,40 @@ def create_app() -> pn.template.FastGridTemplate:
         save_layout=True,
     )
 
-    template.main[0:1, 0:12] = pn.Column(
-        pn.pane.Markdown("## This is where you will find all the info on the home\'s sensor system! Feel free to resize and move any and every icon to your liking."), sizing_mode="stretch_both"
-    )
-
     # Sensor Cards display the current value of a sensor
     indicators = []
 
     default_value = 100
 
     color_thresholds = {
-        SENSOR_NAMES[0]: [(100, OK_COLOR), (166, ERROR_COLOR)], # TDS  under 50 is bad, between 50 - 350 is good, over 350 bad
-        SENSOR_NAMES[1]: [(100, OK_COLOR), (166, ERROR_COLOR)], # TDS
-        SENSOR_NAMES[2]: [(100, ERROR_COLOR), (166, OK_COLOR)], # Water Height above 166 is good below 166 is bad
-        SENSOR_NAMES[3]: [(100, ERROR_COLOR), (166, OK_COLOR)], # Water Height 
-        SENSOR_NAMES[4]: [(100, ERROR_COLOR), (166, OK_COLOR)], # Water Height 
-        SENSOR_NAMES[5]: [(100, ERROR_COLOR), (166, OK_COLOR)], # Water Height 
+        SENSOR_NAMES[0]: [(100, OK_COLOR), (166, ERROR_COLOR)],
+        # TDS  under 50 is bad, between 50 - 350 is good, over 350 bad
+        SENSOR_NAMES[1]: [(100, OK_COLOR), (166, ERROR_COLOR)],  # TDS
+        SENSOR_NAMES[2]: [(100, ERROR_COLOR), (166, OK_COLOR)],  # Water Height above 166 is good below 166 is bad
+        SENSOR_NAMES[3]: [(100, ERROR_COLOR), (166, OK_COLOR)],  # Water Height
+        SENSOR_NAMES[4]: [(100, ERROR_COLOR), (166, OK_COLOR)],  # Water Height
+        SENSOR_NAMES[5]: [(100, ERROR_COLOR), (166, OK_COLOR)],  # Water Height
         SENSOR_NAMES[6]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Turbidity WE WILL COME BACK TO THIS
         SENSOR_NAMES[7]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Turbidity WE WILL COME BACK TO THIS
         SENSOR_NAMES[8]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # pH
         SENSOR_NAMES[9]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # pH
-        SENSOR_NAMES[10]: [(66, OK_COLOR), (100, ERROR_COLOR)], # AQS
-        SENSOR_NAMES[11]: [(66, OK_COLOR), (100, ERROR_COLOR)], # AQS
-        SENSOR_NAMES[12]: [(66, OK_COLOR), (100, ERROR_COLOR)], # AQS
-        SENSOR_NAMES[13]: [(66, OK_COLOR), (100, ERROR_COLOR)], # CO2
-        SENSOR_NAMES[14]: [(66, OK_COLOR), (100, ERROR_COLOR)], # CO2
-        SENSOR_NAMES[15]: [(66, OK_COLOR), (100, ERROR_COLOR)], # CO2
-        SENSOR_NAMES[16]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Temp
-        SENSOR_NAMES[17]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Temp
-        SENSOR_NAMES[18]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Temp
-        SENSOR_NAMES[19]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Humidity
-        SENSOR_NAMES[20]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Humidity
-        SENSOR_NAMES[21]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Humidity
-        SENSOR_NAMES[22]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Particle Count
-        SENSOR_NAMES[23]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Particle Count
-        SENSOR_NAMES[24]: [(66, OK_COLOR), (100, ERROR_COLOR)], # Particle Count
-        SENSOR_NAMES[25]: [(66, OK_COLOR), (100, ERROR_COLOR)], # O2
-        SENSOR_NAMES[26]: [(66, OK_COLOR), (100, ERROR_COLOR)], # O2
+        SENSOR_NAMES[10]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # AQS
+        SENSOR_NAMES[11]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # AQS
+        SENSOR_NAMES[12]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # AQS
+        SENSOR_NAMES[13]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # CO2
+        SENSOR_NAMES[14]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # CO2
+        SENSOR_NAMES[15]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # CO2
+        SENSOR_NAMES[16]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Temp
+        SENSOR_NAMES[17]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Temp
+        SENSOR_NAMES[18]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Temp
+        SENSOR_NAMES[19]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Humidity
+        SENSOR_NAMES[20]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Humidity
+        SENSOR_NAMES[21]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Humidity
+        SENSOR_NAMES[22]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Particle Count
+        SENSOR_NAMES[23]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Particle Count
+        SENSOR_NAMES[24]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # Particle Count
+        SENSOR_NAMES[25]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # O2
+        SENSOR_NAMES[26]: [(66, OK_COLOR), (100, ERROR_COLOR)],  # O2
         SENSOR_NAMES[27]: [(66, OK_COLOR), (100, ERROR_COLOR)]  # O2
     }
 
@@ -293,8 +294,8 @@ def create_app() -> pn.template.FastGridTemplate:
         SENSOR_NAMES[9]: "{value}",
         SENSOR_NAMES[10]: "{value}ppm",
         SENSOR_NAMES[11]: "{value}ppm",
-        SENSOR_NAMES[12]: "{value}ppm", 
-        SENSOR_NAMES[13]: "{value}ppm", 
+        SENSOR_NAMES[12]: "{value}ppm",
+        SENSOR_NAMES[13]: "{value}ppm",
         SENSOR_NAMES[14]: "{value}ppm",
         SENSOR_NAMES[15]: "{value}ppm",
         SENSOR_NAMES[16]: "{value}° f",
@@ -312,30 +313,27 @@ def create_app() -> pn.template.FastGridTemplate:
     }
 
     row_col_pairs = [
-        (1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
+        (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5),
         (2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5),
-        (3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5),
         (4, 0), (4, 1), (4, 2), (4, 3), (4, 4), (4, 5),
-        (5, 0), (5, 1), (5, 2), (5, 3), (5, 4), (5, 5)
+        (6, 0), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5),
+        (8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5),
     ]
 
     for (row, col), sensor_name in zip(row_col_pairs, SENSOR_NAMES):
-        format_string = sensor_format_map[sensor_name] # Get format string for the sensor
+        format_string = sensor_format_map[sensor_name]  # Get format string for the sensor
         thresholds = color_thresholds.get(sensor_name, [])  # Get color thresholds for the sensor
         indicator = create_sensor_card(SENSOR_TITLES[sensor_name], default_value, thresholds)
         indicator.format = format_string
-        template.main[row, 2 * col : 2 * col + 2] = indicator
+        template.main[row, 2 * col: 2 * col + 2] = indicator
         indicators.append(indicator)
-
-    # Historical Averages
-
-    template.main[6:7, 0:12] = pn.Column(
-        pn.pane.Markdown("# Historical Averages"), sizing_mode="stretch_both"
-    )
 
     # Get the first day of the current month
     current_date = date.today()
+    yesterday = date.today()
     first_day_of_month = current_date.replace(day=1)
+
+    values = (datetime(2023, 3, 2, 12, 10), datetime(2023, 3, 2, 12, 22))
 
     date_picker = pn.widgets.DatePicker(
         name='Choose Month',
@@ -343,12 +341,16 @@ def create_app() -> pn.template.FastGridTemplate:
         end=current_date.replace(day=1, month=current_date.month + 1)
     )
 
-    # date_picker = pn.widgets.DatePicker(
-    #     name='Date Picker', value=date.today(),
-    # )
+    date_range_picker = pn.widgets.DatetimeRangePicker(
+        name='Choose Date Range',
+        value=values,
+        end=current_date.replace(day=1, month=current_date.month + 1)
+    )
 
     select_sensor = pn.widgets.Select(
-        name="Sensor", options=SENSOR_TITLES, value=SENSOR_TITLES[SENSOR_NAMES[0]] # REPLACE WITH TITLES!!!
+        name="Sensor",
+        options=SENSOR_TITLES,
+        value=SENSOR_TITLES[SENSOR_NAMES[0]]  # REPLACE WITH TITLES!!!
     )
 
     plot_panel = pn.pane.HoloViews(sizing_mode="stretch_width")
@@ -376,14 +378,42 @@ def create_app() -> pn.template.FastGridTemplate:
 
         plot_panel.object = plot
 
-
+    # @pn.depends(select_sensor.param.value, date_range_picker.param.value, watch=True)  # type: ignore
+    # def _update_plot(*_):
+    #     sensor_title = select_sensor.value
+    #     sensor = next((name for name, t in SENSOR_TITLES.items() if t == sensor_title), None)
+    #     selected_date = date_range_picker.value
+    #     data = get_average_data(sensor, selected_date)
+    #
+    #     # Convert the 'Days' column to datetime for proper axis formatting
+    #     data['Days'] = pd.to_datetime(data['Days'])
+    #
+    #     # Create a Holoviews Curve plot
+    #     plot = hv.Curve(data, 'Days', 'Daily Averages').opts(
+    #         title=sensor_title, color=ACCENT, responsive=True, height=800,
+    #         fontscale=2,
+    #         xaxis='top',  # Place the x-axis on top
+    #         xrotation=45,  # Rotate x-axis labels for better visibility
+    #         xlabel='',  # Remove x-axis label
+    #         ylabel='Daily Averages',  # Set y-axis label
+    #         show_grid=True,
+    #     )
+    #
+    #     plot_panel.object = plot
 
     _update_plot()
 
-    template.main[7:13, 0:12] = pn.Column(
+    # Historical Averages
+
+    # template.main[10:11, 0:12] = pn.Column(
+    #     pn.pane.Markdown("# Historical Averages"), sizing_mode="stretch_both"
+    # )
+
+    template.main[10:15, 0:12] = pn.Column(
         pn.Tabs(
-            pn.Row(select_sensor, name="By Sensor", margin=(10, 5, 25, 5)),
-            pn.Row(select_sensor, date_picker, name="Past Months", margin=(10, 5, 25, 5)),
+            pn.Row(select_sensor, name="Current Month", margin=(10, 5, 25, 5)),
+            pn.Row(select_sensor, date_picker, name="By Month", margin=(10, 5, 25, 5)),
+            pn.Row(select_sensor, date_range_picker, name="By Range", margin=(10, 5, 25, 5)),
         ),
         plot_panel,
     )
@@ -393,9 +423,11 @@ def create_app() -> pn.template.FastGridTemplate:
 
     return template
 
+
 def serve():
     """Serves the app"""
     create_app().servable()
+
 
 if __name__.startswith("bokeh"):
     serve()
